@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FlashStore™ — Servidor en Crisis</title>
+
+<!-- ════════════════════════════════════════════════════
+     DEPENDENCIAS EXTERNAS
+     Brython es un intérprete de Python que corre en el
+     navegador. Permite escribir lógica en Python en lugar
+     de JavaScript. Requiere dos archivos:
+       · brython.min.js  → el intérprete principal
+       · brython_stdlib.js → la biblioteca estándar (math, etc.)
+════════════════════════════════════════════════════ -->
+<script src="https://cdn.jsdelivr.net/npm/brython@3.12.0/brython.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/brython@3.12.0/brython_stdlib.js"></script>
+
+<!-- Fuentes de Google: tipografía elegante para la interfaz -->
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  /* ════════════════════════════════════════════════════
+     SISTEMA DE TOKENS DE COLOR
+     Se definen como variables CSS (--nombre) para
+     reutilizarlas en todo el documento sin repetir
+     valores. Cada color tiene 3 variantes:
+       · base (suave, para fondos)
+       · -d   (medio, para textos secundarios)
+       · -dk  (oscuro, para textos principales)
+  ════════════════════════════════════════════════════ */
+  :root {
+    /* Paleta principal (5 colores temáticos) */
+    --rose:#f9c6c9;   --rose-d:#e8848c;   --rose-dk:#b84d5a;   /* Rosa — peligro/colapso */
+    --lavender:#d4c5f9; --lav-d:#9b7fe8;  --lav-dk:#5e3fa3;    /* Lavanda — Fase 1 */
+    --mint:#b8f0dc;   --mint-d:#5ecfa4;   --mint-dk:#1e7a58;   /* Menta — Fase 2/seguro */
+    --peach:#ffdab5;  --peach-d:#f4a35c;  --peach-dk:#b05e15;  /* Durazno — Fase 3 */
+    --sky:#b8dffe;    --sky-d:#5db0f0;    --sky-dk:#1a5fa0;    /* Cielo — Fase 4 */
+
+    /* Colores neutros para texto y fondos */
+    --cream:#fdf8f2;   /* Fondo de la página */
+    --paper:#fffdf9;   /* Fondo de las tarjetas */
+    --ink:#2a1f3d;     /* Texto principal (casi negro) */
+    --ink-soft:#6b5f82; /* Texto secundario */
+    --ink-dim:#a394b8;  /* Texto muy suave / etiquetas */
+    --border:#ede5f7;   /* Color de bordes */
+    --shadow:rgba(100,70,150,0.10); /* Sombras suaves */
+  }
+
+  /* Reset universal: quita márgenes/paddings por defecto del navegador */
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+  /* Estilos del cuerpo de la página */
+  body{
+    background:var(--cream);
+    color:var(--ink);
+    font-family:'DM Sans',sans-serif;
+    font-weight:400;
+    min-height:100vh;
+    overflow-x:hidden; /* Evita scroll horizontal accidental */
+  }
+
+  /* Decoración de fondo: tres elipses de colores difuminados
+     superpuestas usando ::before (pseudo-elemento).
+     position:fixed → se queda fija aunque el usuario haga scroll.
+     pointer-events:none → no bloquea clics del usuario.
+     z-index:0 → queda debajo del contenido.                    */
+  body::before{
+    content:'';
+    position:fixed;
+    inset:0; /* shorthand para top/right/bottom/left: 0 */
+    background:
+      radial-gradient(ellipse 60% 50% at 10% 20%,rgba(212,197,249,0.35) 0%,transparent 60%),
+      radial-gradient(ellipse 50% 60% at 90% 80%,rgba(249,198,201,0.30) 0%,transparent 55%),
+      radial-gradient(ellipse 40% 40% at 50% 50%,rgba(184,240,220,0.18) 0%,transparent 60%);
+    pointer-events:none;
+    z-index:0;
+  }
+
+  /* Contenedor central: centra el contenido y lo limita a 860px */
+  .container{
+    position:relative;
+    z-index:1; /* Sobre el ::before decorativo */
+    max-width:860px;
+    margin:0 auto;
+    padding:3rem 1.5rem 5rem;
+  }
+
+  /* ── ENCABEZADO ─────────────────────────────────── */
+  header{text-align:center;margin-bottom:3.5rem}
+
+  /* Chip superior con texto "Problema de ecuaciones..." */
+  .logo-chip{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    background:var(--lavender);
+    color:var(--lav-dk);
+    border-radius:999px; /* Completamente redondeado = píldora */
+    padding:5px 18px;
+    font-size:11px;
+    font-weight:500;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    margin-bottom:1.2rem;
+  }
+  .logo-chip::before{content:'◆';font-size:8px} /* Diamante decorativo */
+
+  /* Título grande con fuente serif elegante */
+  h1{
+    font-family:'Playfair Display',serif;
+    font-size:clamp(2.2rem,6vw,3.8rem); /* Responsive: mínimo 2.2rem, ideal 6vw, máximo 3.8rem */
+    font-weight:700;
+    line-height:1.1;
+    color:var(--ink);
+  }
+  h1 em{font-style:italic;color:var(--lav-dk)} /* "Engine" en cursiva lavanda */
+
+  .subtitle{
+    font-size:15px;
+    color:var(--ink-soft);
+    margin-top:.6rem;
+    line-height:1.6;
+    max-width:500px;
+    margin-left:auto;
+    margin-right:auto;
+  }
+
+  /* Fila de 4 puntitos decorativos de colores */
+  .dots-row{display:flex;gap:6px;justify-content:center;margin:1.5rem 0}
+  .dot{width:8px;height:8px;border-radius:50%}
+  .dot.rose{background:var(--rose-d)}
+  .dot.lav{background:var(--lav-d)}
+  .dot.mint{background:var(--mint-d)}
+  .dot.peach{background:var(--peach-d)}
+
+  /* ── TARJETAS (CARDS) ────────────────────────────
+     Cada fase del problema es una tarjeta animada.
+     · opacity:0 + translateY(18px)  → estado inicial oculto
+     · Cuando Brython agrega clase "visible" → aparece con transición
+  ────────────────────────────────────────────────── */
+  .card{
+    background:var(--paper);
+    border:1px solid var(--border);
+    border-radius:24px;
+    padding:2rem 2rem 1.8rem;
+    margin-bottom:1.5rem;
+    box-shadow:0 4px 32px var(--shadow);
+    position:relative;
+    overflow:hidden; /* El ::before coloreado no se sale de los bordes */
+    opacity:0;
+    transform:translateY(18px); /* Aparece desde abajo */
+    transition:opacity .55s ease,transform .55s ease;
+  }
+  .card.visible{opacity:1;transform:none} /* Estado final animado */
+
+  /* Línea coloreada de 4px en la parte superior de cada tarjeta */
+  .card::before{
+    content:'';
+    position:absolute;
+    top:0;left:0;right:0;
+    height:4px;
+    border-radius:24px 24px 0 0;
+  }
+  /* Cada variante de color asigna un degradado distinto a esa línea */
+  .card.c-rose::before{background:linear-gradient(90deg,var(--rose),var(--peach))}
+  .card.c-lav::before{background:linear-gradient(90deg,var(--lavender),var(--sky))}
+  .card.c-mint::before{background:linear-gradient(90deg,var(--mint),var(--sky))}
+  .card.c-peach::before{background:linear-gradient(90deg,var(--peach),var(--rose))}
+  .card.c-sky::before{background:linear-gradient(90deg,var(--sky),var(--lavender))}
+
+  /* Encabezado interno de cada tarjeta */
+  .card-top{display:flex;align-items:center;gap:12px;margin-bottom:1.4rem}
+
+  /* Píldoras "Fase 1", "Fase 2"... */
+  .phase-pill{
+    font-size:10px;font-weight:500;letter-spacing:.1em;
+    text-transform:uppercase;padding:4px 12px;border-radius:999px;
+  }
+  .phase-pill.p1{background:var(--lavender);color:var(--lav-dk)}
+  .phase-pill.p2{background:var(--mint);color:var(--mint-dk)}
+  .phase-pill.p3{background:var(--peach);color:var(--peach-dk)}
+  .phase-pill.p4{background:var(--rose);color:var(--rose-dk)}
+  .phase-pill.p5{background:var(--sky);color:var(--sky-dk)}
+
+  /* Título dentro de la tarjeta */
+  .card-title{font-family:'Playfair Display',serif;font-size:1.15rem;color:var(--ink)}
+
+  /* ── CAMPOS DE FORMULARIO ──────────────────────── */
+  .field{margin-bottom:1rem}
+  .field label{
+    display:block;font-size:12px;font-weight:500;
+    color:var(--ink-soft);margin-bottom:6px;letter-spacing:.03em;
+  }
+  .field input[type=text],
+  .field input[type=number]{
+    width:100%;
+    background:var(--cream);
+    border:1.5px solid var(--border);
+    border-radius:12px;
+    padding:12px 16px;
+    font-size:15px;
+    font-family:'DM Mono',monospace; /* Fuente monoespaciada para ecuaciones */
+    color:var(--ink);
+    outline:none;
+    transition:border-color .2s,box-shadow .2s;
+  }
+  .field input:focus{
+    border-color:var(--lav-d);
+    box-shadow:0 0 0 3px rgba(155,127,232,0.15); /* Anillo de foco accesible */
+  }
+
+  /* Grid de 2 columnas para los campos de parámetros */
+  .input-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+
+  /* ── BOTONES ───────────────────────────────────── */
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:13px 28px;
+    border:none;
+    border-radius:14px;
+    cursor:pointer;
+    font-family:'DM Sans',sans-serif;
+    font-size:14px;
+    font-weight:500;
+    transition:transform .18s,box-shadow .18s;
+  }
+  .btn:hover{transform:translateY(-2px);box-shadow:0 6px 24px var(--shadow)} /* Efecto de levitación */
+  .btn:active{transform:translateY(0)} /* Presionado regresa a su lugar */
+  .btn-lav{background:linear-gradient(135deg,var(--lavender),#c2b0f5);color:var(--lav-dk)}
+  .btn-mint{background:linear-gradient(135deg,var(--mint),#9ee8cc);color:var(--mint-dk)}
+  .btn svg{width:16px;height:16px}
+
+  /* ── BLOQUES DE MATEMÁTICAS ────────────────────── */
+  /* Cajas con fondo crema que muestran los pasos matemáticos */
+  .math-block{
+    background:var(--cream);
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding:1.3rem 1.5rem;
+    font-family:'DM Mono',monospace;
+    font-size:13px;
+    line-height:2;
+    color:var(--ink);
+    margin:1rem 0;
+    position:relative;
+  }
+  .math-block .blabel{
+    display:inline-block;font-size:10px;font-weight:500;
+    letter-spacing:.1em;text-transform:uppercase;
+    margin-bottom:10px;padding:3px 10px;border-radius:999px;
+  }
+  /* Variantes de color para las etiquetas dentro de bloques matemáticos */
+  .blabel.lav{background:var(--lavender);color:var(--lav-dk)}
+  .blabel.mint{background:var(--mint);color:var(--mint-dk)}
+  .blabel.peach{background:var(--peach);color:var(--peach-dk)}
+  .blabel.rose{background:var(--rose);color:var(--rose-dk)}
+  .blabel.sky{background:var(--sky);color:var(--sky-dk)}
+
+  /* Cada paso numerado dentro de un bloque matemático */
+  .step{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}
+
+  /* Círculo numerador (1, 2, 3...) */
+  .sn{
+    flex-shrink:0; /* No se encoge aunque haya poco espacio */
+    width:22px;height:22px;
+    border-radius:50%;
+    display:inline-flex;align-items:center;justify-content:center;
+    font-size:10px;font-weight:500;font-family:'DM Sans',sans-serif;
+  }
+  .sn.lav{background:var(--lavender);color:var(--lav-dk)}
+  .sn.mint{background:var(--mint);color:var(--mint-dk)}
+  .sn.peach{background:var(--peach);color:var(--peach-dk)}
+  .sn.rose{background:var(--rose);color:var(--rose-dk)}
+  .sn.sky{background:var(--sky);color:var(--sky-dk)}
+
+  /* Texto destacado dentro de fórmulas */
+  .hl-lav{color:var(--lav-dk);font-weight:500}
+  .hl-mint{color:var(--mint-dk);font-weight:500}
+  .hl-peach{color:var(--peach-dk);font-weight:500}
+  .hl-rose{color:var(--rose-dk);font-weight:500}
+  .hl-sky{color:var(--sky-dk);font-weight:500}
+
+  /* ── TABLA DE VARIABLES ─────────────────────────── */
+  .tbl-wrap{border-radius:16px;overflow:hidden;border:1px solid var(--border);margin:1rem 0}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  thead{background:var(--lavender)}
+  th{
+    padding:10px 16px;text-align:left;
+    font-size:11px;font-weight:500;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--lav-dk);
+  }
+  td{padding:10px 16px;border-top:1px solid var(--border);color:var(--ink);font-family:'DM Mono',monospace;font-size:12.5px}
+  tr:hover td{background:rgba(212,197,249,.12)} /* Resaltado al pasar el cursor */
+
+  /* Etiquetas "Dato conocido" / "Por encontrar" */
+  .tag{display:inline-block;padding:2px 10px;border-radius:999px;font-size:10px;font-weight:500;font-family:'DM Sans',sans-serif}
+  .tag-known{background:var(--mint);color:var(--mint-dk)}   /* Verde = ya sabemos */
+  .tag-find{background:var(--peach);color:var(--peach-dk)}  /* Durazno = por calcular */
+  td.sym{font-size:14px;font-weight:500;color:var(--lav-dk)}
+
+  /* ── MÉTRICAS FINALES (2 columnas) ──────────────── */
+  .metrics-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:1rem 0}
+  .metric{background:var(--cream);border:1px solid var(--border);border-radius:16px;padding:1.1rem 1.3rem}
+  .metric .ml{font-size:11px;color:var(--ink-dim);margin-bottom:6px;font-weight:500;text-transform:uppercase;letter-spacing:.07em}
+  .metric .mv{font-size:1.7rem;font-weight:700;font-family:'Playfair Display',serif}
+  .metric.danger .mv{color:var(--rose-dk)} /* Rojo para colapso */
+  .metric.safe .mv{color:var(--mint-dk)}   /* Verde para sistema seguro */
+
+  /* ── ALERTAS ─────────────────────────────────────── */
+  .alert{border-radius:16px;padding:14px 20px;font-size:14px;font-weight:500;margin-bottom:1rem;display:flex;align-items:center;gap:10px}
+  .alert-danger{background:var(--rose);color:var(--rose-dk);border:1px solid var(--rose-d)}
+  .alert-safe{background:var(--mint);color:var(--mint-dk);border:1px solid var(--mint-d)}
+  .alert-icon{font-size:20px}
+
+  /* ── CONTENEDOR DE LA GRÁFICA ────────────────────── */
+  .canvas-wrap{
+    border-radius:20px;overflow:hidden;border:1px solid var(--border);
+    margin-top:1rem;background:var(--cream);
+    position:relative;height:280px; /* Altura fija para el canvas */
+  }
+  #mainCanvas{display:block;width:100%;height:100%}
+
+  /* ── DIVISOR DECORATIVO ──────────────────────────── */
+  .divider{display:flex;align-items:center;gap:12px;margin:.5rem 0 1rem}
+  .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+  .divider span{font-size:11px;color:var(--ink-dim);letter-spacing:.08em;text-transform:uppercase}
+
+  /* Clase utilitaria para ocultar elementos */
+  .hidden{display:none!important}
+
+  /* Símbolo matemático decorativo en la esquina de cada tarjeta */
+  .corner-art{
+    position:absolute;bottom:16px;right:20px;
+    font-size:64px;opacity:.07; /* Muy transparente, solo decorativo */
+    pointer-events:none;
+    font-family:'Playfair Display',serif;line-height:1;
+  }
+
+  /* En pantallas pequeñas, los grids pasan a 1 columna */
+  @media(max-width:580px){
+    .input-grid{grid-template-columns:1fr}
+    .metrics-row{grid-template-columns:1fr}
+  }
+</style>
+</head>
+
+<!-- onload="brython()" → Inicia el intérprete Python al cargar la página -->
+<body onload="brython()">
+<div class="container">
+
+  <!-- ══════════════════════════════════════════════
+       ENCABEZADO PRINCIPAL
+  ══════════════════════════════════════════════ -->
+  <header>
+    <div class="logo-chip">Problema de ecuaciones diferenciales</div>
+    <h1>FlashStore <em>Engine</em></h1>
+    <p class="subtitle">
+      ¿En qué minuto exacto colapsará el servidor durante Black Friday?
+      — resuelto por <strong>variables separables</strong>
+    </p>
+    <div class="dots-row">
+      <div class="dot rose"></div>
+      <div class="dot lav"></div>
+      <div class="dot mint"></div>
+      <div class="dot peach"></div>
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════════════
+       TARJETA 1 — FASE 1: Ingreso de ecuación
+       Visible desde el inicio (clase "visible" ya puesta).
+       El usuario escribe la ecuación diferencial.
+  ══════════════════════════════════════════════ -->
+  <div class="card c-lav visible" id="card1">
+    <div class="corner-art">∫</div><!-- Símbolo de integral decorativo -->
+    <div class="card-top">
+      <span class="phase-pill p1">Fase 1</span>
+      <span class="card-title">Ingresa la ecuación diferencial</span>
+    </div>
+    <div class="field">
+      <label>Ecuación diferencial (forma estándar)</label>
+      <!-- Campo de texto con la ecuación por defecto -->
+      <input type="text" id="eq_input" value="dU/dt + kU = L" spellcheck="false">
+    </div>
+    <p style="font-size:13px;color:var(--ink-dim);margin-bottom:1.2rem;line-height:1.7">
+      La ecuación modela la cantidad de usuarios <strong>U(t)</strong> simultáneos en el servidor,
+      donde <strong>L</strong> es la tasa de entrada y <strong>k</strong> la tasa de salida.
+    </p>
+    <!-- Este botón dispara la función verificar_modelo en Brython -->
+    <button class="btn btn-lav" id="btn_verificar">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 8l3 3 6-6"/><!-- Ícono de paloma/check -->
+      </svg>
+      Validar modelo simbólico
+    </button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TARJETA 1R — SOLUCIÓN FASE 1
+       Oculta al inicio. Brython la muestra al hacer clic.
+       Presenta la derivación simbólica paso a paso.
+  ══════════════════════════════════════════════ -->
+  <div class="card c-lav hidden" id="card1r">
+    <div class="corner-art">dx</div>
+    <div class="card-top">
+      <span class="phase-pill p1">Fase 1 · Solución</span>
+      <span class="card-title">Método de variables separables — paso a paso</span>
+    </div>
+
+    <!-- Bloque 1: Separación de variables -->
+    <div class="math-block">
+      <div class="blabel lav">Separación de variables</div>
+      <div class="step"><span class="sn lav">1</span><span>Reescribir: &nbsp; dU/dt = L − kU</span></div>
+      <div class="step"><span class="sn lav">2</span><span>Separar variables: &nbsp; <span class="hl-lav">dU / (L − kU) = dt</span></span></div>
+    </div>
+
+    <!-- Bloque 2: Integración -->
+    <div class="math-block">
+      <div class="blabel mint">Integración de ambos lados</div>
+      <div class="step"><span class="sn mint">3</span><span>∫ dU/(L − kU) = ∫ dt</span></div>
+      <div class="step"><span class="sn mint">4</span><span>Sustituir u = L − kU &nbsp;→&nbsp; du = −k dU &nbsp;→&nbsp; dU = −du/k</span></div>
+      <div class="step"><span class="sn mint">5</span><span>∫ (−1/k) · du/u = ∫ dt</span></div>
+      <div class="step"><span class="sn mint">6</span><span><span class="hl-mint">−(1/k)·ln|L − kU| = t + C₁</span></span></div>
+    </div>
+
+    <!-- Bloque 3: Despejar U(t) → solución general -->
+    <div class="math-block">
+      <div class="blabel peach">Despejar U(t)</div>
+      <div class="step"><span class="sn peach">7</span><span>ln|L − kU| = −kt − kC₁</span></div>
+      <div class="step"><span class="sn peach">8</span><span>|L − kU| = e<sup>−kC₁</sup> · e<sup>−kt</sup> &nbsp;→&nbsp; L − kU = A·e<sup>−kt</sup></span></div>
+      <div class="step"><span class="sn peach">9</span><span>kU = L − A·e<sup>−kt</sup></span></div>
+      <div class="step"><span class="sn peach">10</span>
+        <span><strong>Solución general: &nbsp;<span class="hl-peach">U(t) = L/k − (A/k)·e<sup>−kt</sup></span></strong></span>
+      </div>
+      <div class="step" style="margin-top:8px;font-size:12px;color:var(--ink-dim)">
+        <span></span>
+        <span>Donde C = −A/k es la constante de integración que determinaremos con la condición inicial.</span>
+      </div>
+    </div>
+    <p style="font-size:13px;color:var(--mint-dk);margin-top:.5rem">✦ Modelo validado. Ahora ingresa los parámetros del escenario.</p>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TARJETA 2 — FASE 2: Parámetros numéricos
+       El usuario ingresa los 4 valores del problema real.
+  ══════════════════════════════════════════════ -->
+  <div class="card c-mint hidden" id="card2">
+    <div class="corner-art">k</div>
+    <div class="card-top">
+      <span class="phase-pill p2">Fase 2</span>
+      <span class="card-title">Parámetros del escenario Black Friday</span>
+    </div>
+    <div class="input-grid">
+      <!-- U(0): condición inicial -->
+      <div class="field"><label>U(0) — usuarios iniciales</label>
+        <input type="number" id="val_u0" value="120" step="1"></div>
+      <!-- L: velocidad de llegada de usuarios -->
+      <div class="field"><label>L — tasa de entrada (usuarios/min)</label>
+        <input type="number" id="val_l" value="45" step="1"></div>
+      <!-- k: velocidad de salida/disipación -->
+      <div class="field"><label>k — tasa de salida (min⁻¹)</label>
+        <input type="number" id="val_k" value="0.08" step="0.01"></div>
+      <!-- U_max: límite del servidor -->
+      <div class="field"><label>U<sub>max</sub> — capacidad máxima del servidor</label>
+        <input type="number" id="val_umax" value="500" step="1"></div>
+    </div>
+    <!-- Este botón dispara la función resolver en Brython -->
+    <button class="btn btn-mint" id="btn_resolver">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="8" cy="8" r="6"/>
+        <path d="M8 5v3l2 2"/><!-- Ícono de reloj -->
+      </svg>
+      Resolver problema completo
+    </button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TARJETA 3 — FASE 3: Tabla de datos del problema
+       Brython genera el contenido de <tbody> dinámicamente.
+       Muestra qué valores ya conocemos y cuáles calcular.
+  ══════════════════════════════════════════════ -->
+  <div class="card c-peach hidden" id="card3">
+    <div class="corner-art">?</div>
+    <div class="card-top">
+      <span class="phase-pill p3">Fase 3</span>
+      <span class="card-title">Tabla de condiciones del problema</span>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Símbolo</th>
+            <th>Significado</th>
+            <th>Valor</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <!-- tbody vacío: Brython lo llena con filas HTML generadas en Python -->
+        <tbody id="tabla_body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TARJETA 4 — FASE 4: Cálculo de la constante C
+       Brython genera el contenido de #steps_constante.
+       Aplica la condición inicial U(0) para hallar C.
+  ══════════════════════════════════════════════ -->
+  <div class="card c-sky hidden" id="card4">
+    <div class="corner-art">C</div>
+    <div class="card-top">
+      <span class="phase-pill p4">Fase 4</span>
+      <span class="card-title">Cálculo de la constante C con condición inicial</span>
+    </div>
+    <!-- Contenedor vacío: Brython inyecta el HTML de los pasos aquí -->
+    <div id="steps_constante"></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TARJETA 5 — FASE 5: Respuesta final y gráfica
+       Brython llena: #status_alert, #metricas, #steps_colapso.
+       La gráfica la dibuja JavaScript nativo en el canvas.
+  ══════════════════════════════════════════════ -->
+  <div class="card c-rose hidden" id="card5">
+    <div class="corner-art">t*</div>
+    <div class="card-top">
+      <span class="phase-pill p5">Fase 5</span>
+      <span class="card-title">Respuesta: minuto exacto de colapso</span>
+    </div>
+    <!-- Alerta (roja o verde según si hay colapso) -->
+    <div id="status_alert"></div>
+    <!-- Métricas numéricas destacadas -->
+    <div class="metrics-row" id="metricas"></div>
+    <!-- Divisor visual -->
+    <div class="divider"><span>Procedimiento de despeje</span></div>
+    <!-- Pasos algebraicos para encontrar t* -->
+    <div id="steps_colapso"></div>
+    <!-- Canvas donde JS dibuja la curva U(t) -->
+    <div class="canvas-wrap">
+      <canvas id="mainCanvas"></canvas>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<!-- ════════════════════════════════════════════════════
+     SECCIÓN JS: FUNCIÓN DRAWGRAPH
+     Esta función dibuja la gráfica con la API Canvas 2D
+     de JavaScript nativo (sin librerías externas).
+     Brython NO puede dibujar en canvas directamente, así
+     que cuando termina los cálculos llama a esta función
+     vía window.drawGraph(params).
+════════════════════════════════════════════════════ -->
+<script>
+/**
+ * drawGraph(p) — Dibuja la curva U(t) en el canvas.
+ *
+ * Recibe un objeto p con:
+ *   p.u0       → usuarios iniciales U(0)
+ *   p.L        → tasa de entrada
+ *   p.k        → tasa de salida
+ *   p.C        → constante de integración hallada por Brython
+ *   p.umax     → capacidad máxima del servidor
+ *   p.tc       → tiempo de colapso t* (o 120 si no hay colapso)
+ *   p.collapses → booleano: ¿el servidor colapsa?
+ */
+window.drawGraph = function(p) {
+  const canvas = document.getElementById("mainCanvas");
+  const wrapper = canvas.parentElement;
+
+  // ── Configuración del canvas con soporte para pantallas de alta densidad (Retina) ──
+  const W = wrapper.clientWidth  || 800;
+  const H = wrapper.clientHeight || 280;
+  const dpr = window.devicePixelRatio || 1; // Factor de densidad de píxeles
+  canvas.width  = Math.round(W * dpr);      // Tamaño interno del canvas (px reales)
+  canvas.height = Math.round(H * dpr);
+  canvas.style.width  = W + "px";           // Tamaño visual en la página (CSS px)
+  canvas.style.height = H + "px";
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr); // Escalar el contexto para compensar la densidad
+
+  // ── Desestructurar el objeto de parámetros ──
+  const { u0, L, k, C, umax, tc, collapses } = p;
+  const lk = L / k; // Punto de equilibrio L/k (usuarios al infinito)
+
+  // ── Márgenes internos del área de dibujo ──
+  const padT = 30, padR = 24, padB = 44, padL = 58;
+
+  // ── Rango del eje X (tiempo) y eje Y (usuarios) ──
+  const maxT = Math.max(tc * 1.6, 80);          // Al menos 80 min, o 1.6× el tiempo de colapso
+  const maxU = Math.max(umax * 1.2, u0 * 1.35, lk * 1.4); // Margen superior sobre el máximo
+
+  // ── Funciones de mapeo: coordenadas matemáticas → píxeles del canvas ──
+  // mx(t) → posición X en px para un tiempo t
+  const mx = t => padL + (t / maxT) * (W - padL - padR);
+  // my(u) → posición Y en px para una cantidad u de usuarios (Y invertido: arriba = mayor)
+  const my = u => H - padB - (u / maxU) * (H - padT - padB);
+
+  // ── Fondo del canvas ──
+  ctx.fillStyle = "#fdf8f2"; // Color crema, igual que --cream
+  ctx.fillRect(0, 0, W, H);
+
+  // ── Cuadrícula de referencia (grid) ──
+  ctx.strokeStyle = "rgba(212,197,249,0.35)"; // Lavanda muy suave
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 5; i++) {
+    // Líneas horizontales (un nivel de usuarios por cada división)
+    const yt = H - padB - (i / 5) * (H - padT - padB);
+    ctx.beginPath(); ctx.moveTo(padL, yt); ctx.lineTo(W - padR, yt); ctx.stroke();
+    // Líneas verticales (un instante de tiempo por cada división)
+    const xt = padL + (i / 5) * (W - padL - padR);
+    ctx.beginPath(); ctx.moveTo(xt, padT); ctx.lineTo(xt, H - padB); ctx.stroke();
+  }
+
+  // ── Ejes X e Y ──
+  ctx.strokeStyle = "rgba(107,95,130,0.4)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(padL, padT);
+  ctx.lineTo(padL, H - padB); // Eje Y vertical
+  ctx.lineTo(W - padR, H - padB); // Eje X horizontal
+  ctx.stroke();
+
+  // ── Etiquetas de los ejes (valores numéricos) ──
+  ctx.fillStyle = "#a394b8";
+  ctx.font = "11px 'DM Sans', sans-serif";
+  for (let i = 0; i <= 5; i++) {
+    // Eje X: tiempos
+    const tv = (i / 5) * maxT;
+    ctx.textAlign = "center";
+    ctx.fillText(String(Math.round(tv)), mx(tv), H - padB + 16);
+    // Eje Y: usuarios
+    const uv = (i / 5) * maxU;
+    ctx.textAlign = "right";
+    ctx.fillText(String(Math.round(uv)), padL - 8, my(uv) + 4);
+  }
+  // Títulos de los ejes
+  ctx.textAlign = "center";
+  ctx.fillText("tiempo (min)", W / 2, H - 4);
+  ctx.save();
+  ctx.translate(13, H / 2);
+  ctx.rotate(-Math.PI / 2); // Rotar para escribir verticalmente
+  ctx.fillText("usuarios U(t)", 0, 0);
+  ctx.restore();
+
+  // ── Línea horizontal de equilibrio (L/k) ──
+  // En teoría, U(t) → L/k cuando t → ∞ (si no hay colapso antes)
+  ctx.strokeStyle = "#5ecfa4"; // Menta
+  ctx.setLineDash([6, 4]);     // Línea punteada
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(padL, my(lk)); ctx.lineTo(W - padR, my(lk)); ctx.stroke();
+  ctx.setLineDash([]); // Restaurar línea sólida
+  ctx.fillStyle = "#1e7a58";
+  ctx.textAlign = "left";
+  ctx.font = "11px 'DM Sans', sans-serif";
+  ctx.fillText("equilibrio L/k = " + Math.round(lk), padL + 8, my(lk) - 6);
+
+  // ── Línea horizontal de U_max (capacidad máxima del servidor) ──
+  ctx.strokeStyle = "#e8848c"; // Rosa peligro
+  ctx.setLineDash([8, 4]);
+  ctx.lineWidth = 1.8;
+  ctx.beginPath(); ctx.moveTo(padL, my(umax)); ctx.lineTo(W - padR, my(umax)); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = "#b84d5a";
+  ctx.textAlign = "left";
+  ctx.fillText("U_max = " + Math.round(umax), padL + 8, my(umax) - 6);
+
+  // ── Curva principal U(t) = L/k + C·e^(-kt) ──
+  // Se dibuja como 300 segmentos de línea recta (aproximación suave)
+  const grad = ctx.createLinearGradient(padL, 0, W - padR, 0);
+  grad.addColorStop(0,   "#9b7fe8"); // Inicio: lavanda
+  grad.addColorStop(0.5, "#e8848c"); // Medio: rosa
+  grad.addColorStop(1,   "#f4a35c"); // Final: durazno
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = 3;
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  for (let n = 0; n <= 300; n++) {
+    const t = (n / 300) * maxT;
+    const u = lk + C * Math.exp(-k * t); // Evaluar la solución U(t)
+    n === 0 ? ctx.moveTo(mx(t), my(u)) : ctx.lineTo(mx(t), my(u));
+  }
+  ctx.stroke();
+
+  // ── Punto inicial U(0) ──
+  ctx.fillStyle = "#9b7fe8";
+  ctx.beginPath(); ctx.arc(mx(0), my(u0), 5, 0, 2 * Math.PI); ctx.fill();
+  ctx.fillStyle = "#5e3fa3";
+  ctx.textAlign = "left";
+  ctx.font = "500 11px 'DM Sans', sans-serif";
+  ctx.fillText("U(0) = " + Math.round(u0), mx(0) + 8, my(u0) + 4);
+
+  // ── Punto de colapso t* (solo si el servidor colapsa) ──
+  if (collapses && tc > 0) {
+    const cx2 = mx(tc);  // Posición X del colapso
+    const cy2 = my(umax); // Posición Y = U_max
+    // Punto rojo en el cruce
+    ctx.fillStyle = "#e8848c";
+    ctx.beginPath(); ctx.arc(cx2, cy2, 6, 0, 2 * Math.PI); ctx.fill();
+    // Línea vertical punteada bajando al eje X
+    ctx.strokeStyle = "rgba(232,132,140,0.4)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(cx2, cy2); ctx.lineTo(cx2, H - padB); ctx.stroke();
+    ctx.setLineDash([]);
+    // Etiqueta "t* = X min"
+    ctx.fillStyle = "#b84d5a";
+    ctx.textAlign = "center";
+    ctx.font = "500 12px 'DM Sans', sans-serif";
+    ctx.fillText("t* = " + tc.toFixed(1) + " min", cx2, cy2 - 14);
+  }
+};
+</script>
+
+<!-- ════════════════════════════════════════════════════
+     SECCIÓN BRYTHON: LÓGICA DEL PROBLEMA EN PYTHON
+     Brython transpila este código Python a JavaScript
+     en tiempo de ejecución en el navegador.
+     Aquí se manejan:
+       · Los eventos de botón (clic)
+       · Los cálculos matemáticos
+       · La generación de HTML para los pasos
+       · La comunicación con window.drawGraph (JS)
+════════════════════════════════════════════════════ -->
+<script type="text/python">
+from browser import document, window, timer
+import math
+
+# ── Función auxiliar: mostrar una tarjeta oculta ──
+# 1. Quita la clase "hidden" para que el elemento ocupe espacio en el DOM
+# 2. Después de 30ms agrega "visible" para activar la animación CSS
+# 3. Después de 80ms hace scroll suave hasta la tarjeta
+def show(id):
+    el = document[id]
+    el.classList.remove("hidden")
+    def add_visible():
+        el.classList.add("visible")
+    timer.set_timeout(add_visible, 30)  # Pequeño delay para que la transición CSS se dispare
+    def scroll_to():
+        el.scrollIntoView({"behavior": "smooth", "block": "start"})
+    timer.set_timeout(scroll_to, 80)
+
+# ── Función auxiliar: formatear números con N decimales ──
+def fmt(n, decimals=4):
+    return f"{n:.{decimals}f}"
+
+# ════════════════════════════════════════════════════
+# HANDLER DEL BOTÓN 1: "Validar modelo simbólico"
+# Solo muestra las tarjetas de solución y parámetros.
+# No hace cálculos (la derivación es siempre la misma).
+# ════════════════════════════════════════════════════
+def verificar_modelo(ev):
+    show("card1r")  # Mostrar la solución simbólica paso a paso
+    show("card2")   # Mostrar el formulario de parámetros
+
+document["btn_verificar"].bind("click", verificar_modelo)
+
+# ════════════════════════════════════════════════════
+# HANDLER DEL BOTÓN 2: "Resolver problema completo"
+# Aquí está toda la matemática del problema.
+# ════════════════════════════════════════════════════
+def resolver(ev):
+    # ── Leer los 4 parámetros del formulario ──
+    u0   = float(document["val_u0"].value)    # Condición inicial U(0)
+    L    = float(document["val_l"].value)     # Tasa de entrada de usuarios
+    k    = float(document["val_k"].value)     # Tasa de salida
+    umax = float(document["val_umax"].value)  # Capacidad máxima
+
+    # ── Cálculos previos ──
+    lk = L / k                # Punto de equilibrio L/k (usuario a largo plazo)
+    C  = u0 - lk              # Constante de integración: C = U(0) - L/k
+
+    # ────────────────────────────────────────────────
+    # FASE 3: Tabla de variables conocidas y por hallar
+    # ────────────────────────────────────────────────
+    filas = [
+        ("U(0)",            "Usuarios simultáneos al iniciar Black Friday",  f"{int(u0)} usuarios",    "known"),
+        ("L",               "Tasa de afluencia de nuevos usuarios",           f"{int(L)} usuarios/min", "known"),
+        ("k",               "Tasa de salida / disipación",                    f"{k} min⁻¹",             "known"),
+        ("U<sub>max</sub>", "Capacidad máxima del servidor",                  f"{int(umax)} usuarios",  "known"),
+        ("C",               "Constante de integración (condición inicial)",   "¿?",                     "find"),
+        ("t*",              "Minuto exacto en que el servidor colapsa",       "¿?",                     "find"),
+    ]
+
+    # Construir el HTML de cada fila de la tabla dinámicamente
+    filas_html = ""
+    for sym, sig, val, tipo in filas:
+        tag_cls = "tag-known" if tipo == "known" else "tag-find"
+        tag_txt = "Dato conocido" if tipo == "known" else "Por encontrar"
+        filas_html += f"""<tr>
+            <td class="sym">{sym}</td>
+            <td style="color:var(--ink-soft);font-family:'DM Sans',sans-serif">{sig}</td>
+            <td>{val}</td>
+            <td><span class="tag {tag_cls}">{tag_txt}</span></td>
+        </tr>"""
+
+    document["tabla_body"].innerHTML = filas_html
+    show("card3")
+
+    # ────────────────────────────────────────────────
+    # FASE 4: Cálculo de C con la condición inicial
+    # Aplica U(0) = L/k + C·e^(−k·0) = L/k + C
+    # → C = U(0) − L/k
+    # ────────────────────────────────────────────────
+    signo_c = "+" if C >= 0 else "−"  # Para mostrar correctamente el signo
+
+    # Solución particular ya con el valor de C
+    sol_particular = f"U(t) = {fmt(lk,2)} {signo_c} {fmt(abs(C),2)} · e<sup>−{k}t</sup>"
+
+    # Generar HTML de los pasos del cálculo de C
+    document["steps_constante"].innerHTML = f"""
+      <div class="math-block">
+        <div class="blabel sky">Aplicar condición inicial U(0) = {int(u0)}</div>
+        <div class="step"><span class="sn sky">1</span><span>Solución general: &nbsp; U(t) = L/k + C·e<sup>−kt</sup></span></div>
+        <div class="step"><span class="sn sky">2</span><span>Sustituir t = 0 y U(0) = {int(u0)}:</span></div>
+        <div class="step"><span class="sn sky">3</span><span>{int(u0)} = ({L}/{k}) + C · e<sup>0</sup></span></div>
+        <div class="step"><span class="sn sky">4</span><span>{int(u0)} = {fmt(lk,4)} + C</span></div>
+        <div class="step"><span class="sn sky">5</span><span><strong>C = {int(u0)} − {fmt(lk,4)} = <span class="hl-sky">{fmt(C,4)}</span></strong></span></div>
+      </div>
+      <div class="math-block">
+        <div class="blabel peach">Solución particular del problema</div>
+        <div class="step"><span class="sn peach">✦</span><span><strong>{sol_particular}</strong></span></div>
+      </div>"""
+
+    show("card4")
+
+    # ────────────────────────────────────────────────
+    # FASE 5: Calcular el tiempo de colapso t*
+    # Se resuelve U(t*) = U_max:
+    #   L/k + C·e^(-kt*) = U_max
+    #   e^(-kt*) = (U_max - L/k) / C
+    #   -kt* = ln((U_max - L/k) / C)
+    #   t* = -ln((U_max - L/k) / C) / k
+    # ────────────────────────────────────────────────
+    t_col = -1.0
+    collapses = False
+
+    if C != 0:
+        arg = (umax - lk) / C  # Argumento del logaritmo
+
+        # El logaritmo solo está definido para arg > 0
+        # y t* > 0 significa que el colapso ocurre en el futuro
+        if arg > 0:
+            t_col = -math.log(arg) / k
+            collapses = t_col > 0 and math.isfinite(t_col)
+
+    # ── Generar la Fase 5 según si hay o no colapso ──
+    if collapses:
+        # Caso A: El servidor SÍ colapsa
+        arg_val = (umax - lk) / C
+        ln_val  = math.log(arg_val)
+
+        # Alerta roja de peligro
+        document["status_alert"].innerHTML = f"""
+            <div class="alert alert-danger">
+              <span class="alert-icon">⚠</span>
+              Servidor en riesgo — colapso estimado en <strong>t* = {fmt(t_col,2)} min</strong>
+            </div>"""
+
+        # Tarjetas de métricas numéricas
+        document["metricas"].innerHTML = f"""
+            <div class="metric danger">
+              <div class="ml">Colapso en</div>
+              <div class="mv">{fmt(t_col,2)} <span style="font-size:1rem">min</span></div>
+            </div>
+            <div class="metric">
+              <div class="ml">Equilibrio L/k</div>
+              <div class="mv">{fmt(lk,1)} <span style="font-size:1rem">usuarios</span></div>
+            </div>"""
+
+        # Pasos algebraicos para encontrar t*
+        document["steps_colapso"].innerHTML = f"""
+          <div class="math-block">
+            <div class="blabel rose">Despejar t* donde U(t*) = U<sub>max</sub> = {int(umax)}</div>
+            <div class="step"><span class="sn rose">1</span><span>Igualar: &nbsp; {fmt(lk,2)} {signo_c} {fmt(abs(C),2)}·e<sup>−{k}t</sup> = {int(umax)}</span></div>
+            <div class="step"><span class="sn rose">2</span><span>{fmt(abs(C),2)}·e<sup>−{k}t</sup> = {int(umax)} − {fmt(lk,2)}</span></div>
+            <div class="step"><span class="sn rose">3</span><span>e<sup>−{k}t</sup> = {fmt(arg_val,6)}</span></div>
+            <div class="step"><span class="sn rose">4</span><span>Aplicar ln: &nbsp; −{k}·t = ln({fmt(arg_val,6)}) = {fmt(ln_val,6)}</span></div>
+            <div class="step"><span class="sn rose">5</span>
+              <span><strong>t* = {fmt(-ln_val,6)} / {k} = <span class="hl-rose">{fmt(t_col,2)} minutos</span></strong></span>
+            </div>
+          </div>"""
+
+    else:
+        # Caso B: El servidor NO colapsa (L/k < U_max)
+        document["status_alert"].innerHTML = f"""
+            <div class="alert alert-safe">
+              <span class="alert-icon">✦</span>
+              Sistema resiliente — U(t) no alcanza U<sub>max</sub> = {int(umax)} con estos parámetros.
+            </div>"""
+
+        document["metricas"].innerHTML = f"""
+            <div class="metric safe">
+              <div class="ml">Colapso</div>
+              <div class="mv">No ocurre</div>
+            </div>
+            <div class="metric">
+              <div class="ml">Equilibrio L/k</div>
+              <div class="mv">{fmt(lk,1)} <span style="font-size:1rem">usuarios</span></div>
+            </div>"""
+
+        # Verificación analítica del comportamiento asintótico
+        document["steps_colapso"].innerHTML = f"""
+          <div class="math-block">
+            <div class="blabel mint">Verificación del comportamiento a largo plazo</div>
+            <div class="step"><span class="sn mint">1</span><span>Cuando t → ∞: &nbsp; e<sup>−kt</sup> → 0</span></div>
+            <div class="step"><span class="sn mint">2</span><span>Por lo tanto U(∞) = L/k = {fmt(lk,2)} usuarios</span></div>
+            <div class="step"><span class="sn mint">3</span>
+              <span>Como {fmt(lk,2)} &lt; {int(umax)} = U<sub>max</sub>, el sistema converge sin colapsar.</span>
+            </div>
+          </div>"""
+
+        t_col = 120.0  # Valor arbitrario para la escala del eje X en la gráfica
+
+    show("card5")
+
+    # ── Llamar al dibujador JavaScript desde Python ──
+    # Brython puede acceder a window y crear objetos JS.
+    # Pasamos los parámetros como propiedades de un objeto JS
+    # porque drawGraph espera un objeto JS, no un dict de Python.
+    def trigger_draw():
+        params = window.Object.new()  # Crear objeto JavaScript vacío
+        params.u0        = u0
+        params.L         = L
+        params.k         = k
+        params.C         = C
+        params.umax      = umax
+        params.tc        = t_col
+        params.collapses = collapses
+        window.drawGraph(params)  # Llamar la función JS con los datos
+
+    # El delay de 600ms garantiza que card5 ya terminó de animarse
+    # y el contenedor del canvas ya tiene dimensiones reales medibles
+    # (necesario para calcular W y H correctamente en drawGraph)
+    timer.set_timeout(trigger_draw, 600)
+
+# Registrar el handler del botón "Resolver"
+document["btn_resolver"].bind("click", resolver)
+</script>
+</body>
+</html>
